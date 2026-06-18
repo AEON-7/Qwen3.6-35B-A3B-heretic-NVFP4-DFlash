@@ -19,6 +19,46 @@ A production-stable deployment of **[`AEON-7/Qwen3.6-35B-A3B-heretic-NVFP4`](htt
 
 ---
 
+## Quickstart (copy-paste)
+
+Complete recipe — pull the container, the NVFP4 weights, and a **fresh** DFlash drafter, then serve with the vetted DGX-Spark flags. (No `--mamba-block-size` for this 35B-A3B drafter — it is all-full-attention.) Run on a DGX Spark (GB10 / sm_121a); see [Hard Requirements](#️-hard-requirements-read-first) first.
+
+```bash
+# 1. Pull the unified vLLM container (anonymous pull)
+docker pull ghcr.io/aeon-7/aeon-vllm-ultimate:latest
+
+# 2. Pull the NVFP4 model weights (this repo's weights)
+huggingface-cli download AEON-7/Qwen3.6-35B-A3B-heretic-NVFP4 --local-dir ./aeon-model
+
+# 3. Pull the DFlash drafter — FRESH (re-pull if cloned before 2026-04-19)
+huggingface-cli download z-lab/Qwen3.6-35B-A3B-DFlash --local-dir ./aeon-drafter
+
+# 4. Serve (ENTRYPOINT is /bin/bash, so pass --entrypoint vllm then serve ...)
+docker run --gpus all --rm -p 8000:8000 \
+  -v ./aeon-model:/model:ro \
+  -v ./aeon-drafter:/drafter:ro \
+  --entrypoint vllm \
+  ghcr.io/aeon-7/aeon-vllm-ultimate:latest serve /model \
+  --served-model-name qwen36-35b-heretic qwen36-fast qwen36-deep \
+  --host 0.0.0.0 --port 8000 \
+  --quantization compressed-tensors \
+  --max-model-len 262144 \
+  --max-num-seqs 64 \
+  --max-num-batched-tokens 65536 \
+  --gpu-memory-utilization 0.70 \
+  --enable-chunked-prefill \
+  --enable-prefix-caching \
+  --trust-remote-code \
+  --enable-auto-tool-choice --tool-call-parser qwen3_coder \
+  --reasoning-parser qwen3 \
+  --attention-backend flash_attn \
+  --speculative-config '{"method":"dflash","model":"/drafter","num_speculative_tokens":11}'
+```
+
+For a docker-compose deployment, the 3-alias setup, and per-flag rationale, see [Deployment (compose + full recipe)](#deployment-compose--full-recipe) below.
+
+---
+
 ## Headline performance (measured)
 
 ### v0.23.0 build — current production image
@@ -103,7 +143,9 @@ just `hf download` it directly, no token needed.
 
 ---
 
-## Quick start (5 commands)
+## Deployment (compose + full recipe)
+
+For a one-block copy-paste that pulls everything and serves, see [Quickstart (copy-paste)](#quickstart-copy-paste) at the top. This section covers the docker-compose flow, the canonical on-disk layout, and the per-flag rationale.
 
 ```bash
 # 1. Pre-flight check — confirm anonymous pull works
