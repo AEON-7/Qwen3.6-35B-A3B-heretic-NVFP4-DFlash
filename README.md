@@ -151,6 +151,7 @@ vllm serve /models/qwen36 \
   --gpu-memory-utilization 0.70 \
   --enable-chunked-prefill \
   --enable-prefix-caching \
+  --trust-remote-code \
   --enable-auto-tool-choice --tool-call-parser qwen3_coder \
   --reasoning-parser qwen3 \
   --attention-backend flash_attn \
