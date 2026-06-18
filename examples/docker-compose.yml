@@ -1,12 +1,13 @@
 # Qwen3.6-35B-A3B-heretic NVFP4 + DFlash on DGX Spark
 #
-# Production config validated 2026-04-20.
-#   - Image: ghcr.io/aeon-7/vllm-spark-omni-q36:v1.2 (or :latest)
-#   - Model: AEON-7/Qwen3.6-35B-A3B-heretic-NVFP4 (v2 multimodal-preserved, ~22 GB)
+# Production config validated 2026-06-18 (vLLM 0.23.0 unified image).
+#   - Image: ghcr.io/aeon-7/aeon-vllm-ultimate:latest (= :2026-06-18-v0.23.0-dflashfix)
+#   - Model: AEON-7/Qwen3.6-35B-A3B-heretic-NVFP4 (multimodal-preserved, ~22 GB)
 #   - Drafter: z-lab/Qwen3.6-35B-A3B-DFlash (~905 MB; MUST be re-pulled if cloned before 2026-04-19)
 #
-# Measured performance (single-stream, greedy):
-#   ~117 tok/s short prompts; ~785 tok/s aggregate at 128-concurrency.
+# Measured performance (vLLM 0.23.0, aeon-vllm-ultimate:latest, DFlash n=11):
+#   ~97 tok/s avg single-stream (120+ on math/code/reasoning); ~740 tok/s peak aggregate at c=64.
+#   Scales to c=64 with no crash (the prior vllm-spark-omni-q36:v1.2 image died at c>=32 under DFlash).
 #
 # Default layout (override with QWEN36_MODELS_DIR=/your/path docker compose up -d):
 #   /opt/qwen36/qwen36-nvfp4/    ← AEON-7/Qwen3.6-35B-A3B-heretic-NVFP4
@@ -14,7 +15,7 @@
 
 services:
   vllm:
-    image: ghcr.io/aeon-7/vllm-spark-omni-q36:v1.2
+    image: ghcr.io/aeon-7/aeon-vllm-ultimate:latest
     container_name: vllm-qwen36-heretic
     restart: unless-stopped
     network_mode: host
@@ -22,22 +23,13 @@ services:
       - VLLM_ALLOW_LONG_MAX_MODEL_LEN=1
       - TORCH_MATMUL_PRECISION=high
       - PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
-      - NVIDIA_FORWARD_COMPAT=1
-      # ▼ Belt-and-suspenders for NVFP4 MoE backend selection ▼
-      # vLLM's auto-selector already arrives at MARLIN for the MoE path on this
-      # 256-expert × 512-intermediate shape (every other backend — FLASHINFER_TRTLLM,
-      # FLASHINFER_CUTEDSL{,_BATCHED}, FLASHINFER_CUTLASS, VLLM_CUTLASS — rejects our
-      # config in is_supported_config()). This env var pins the choice defensively
-      # against future vLLM versions that might add a half-broken backend.
-      #
-      # IMPORTANT: this env affects MoE only. The LINEAR (q/k/v/o, mlp) path uses
-      # FlashInferCutlassNvFp4LinearKernel — native FP4 tensor cores on SM121,
-      # unaffected by this env, autotuned at boot. So we ARE getting native FP4
-      # hardware on the linear layers; only the MoE expert path falls back to
-      # Marlin's weight-only-decompress-to-BF16 kernel until kernels are widened.
-      #
-      # See docs/troubleshooting.md "Root cause clarification" for the full picture.
-      - VLLM_TEST_FORCE_FP8_MARLIN=1
+      - NVIDIA_DISABLE_REQUIRE=1
+      # NOTE: the unified aeon-vllm-ultimate:latest (vLLM 0.23.0) image ships the
+      # SM120-family CUTLASS NVFP4 kernels GB10 dispatches to and selects them by
+      # default — the old v1/v1.2 VLLM_TEST_FORCE_FP8_MARLIN=1 MoE guard is no
+      # longer required for this model and is intentionally omitted here. (Per
+      # the DGX-Spark backend notes, the 256-expert x top-8 Qwen3.6 MoE shape
+      # prefers CUTLASS; do NOT pin Marlin on this image.)
     volumes:
       - ${QWEN36_MODELS_DIR:-/opt/qwen36}/qwen36-nvfp4:/models/qwen36
       - ${QWEN36_MODELS_DIR:-/opt/qwen36}/qwen36-dflash:/models/qwen36-dflash
@@ -52,9 +44,9 @@ services:
           --dtype auto \
           --quantization compressed-tensors \
           --max-model-len 262144 \
-          --max-num-seqs 128 \
+          --max-num-seqs 64 \
           --max-num-batched-tokens 65536 \
-          --gpu-memory-utilization 0.85 \
+          --gpu-memory-utilization 0.70 \
           --enable-chunked-prefill \
           --enable-prefix-caching \
           --load-format safetensors \
@@ -62,13 +54,19 @@ services:
           --enable-auto-tool-choice \
           --tool-call-parser qwen3_coder \
           --reasoning-parser qwen3 \
-          --speculative-config '{"method":"dflash","model":"/models/qwen36-dflash","num_speculative_tokens":15}' \
+          --speculative-config '{"method":"dflash","model":"/models/qwen36-dflash","num_speculative_tokens":11}' \
           --attention-backend flash_attn
-          # NOTE: --enforce-eager is NOT required when using v1.2 image + the latest z-lab
-          # DFlash drafter (re-pulled 2026-04-19+). The image's compilation.py:1378 patch
-          # (auto-aligns CUDA graph capture sizes to multiples of 1+spec_tokens) plus the
-          # drafter's long-context fix means CUDA graphs are stable and give ~30% perf
-          # over eager mode.
+          # NOTES (aeon-vllm-ultimate:latest, vLLM 0.23.0):
+          #  - --enforce-eager is NOT required: the image aligns spec-decode CUDA-graph
+          #    capture sizes (FULL graphs) and the latest z-lab drafter (re-pulled
+          #    2026-04-19+) is long-context-stable, so FULL graphs give ~30% over eager.
+          #  - DFlash num_speculative_tokens=11 is optimal for this model (acceptance /
+          #    long-context fidelity drop as n climbs past ~11; n=15 wasted draft compute).
+          #  - Leave the DFlash drafter's attention backend at its DEFAULT (do not add
+          #    attention_backend to the spec config) and do NOT set --kv-cache-dtype:
+          #    the non-causal drafter requires BF16 KV.
+          #  - No --mamba-block-size override needed (this drafter is all-full-attention).
+          #  - gpu-memory-utilization 0.70: GB10 shares one LPDDR5X pool; <=0.70 avoids thrash.
     ipc: host
     deploy:
       resources:
