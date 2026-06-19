@@ -83,7 +83,7 @@ docker pull ghcr.io/aeon-7/aeon-vllm-ultimate:latest
 # If this returns "unauthorized" or "not found":
 #   - The image visibility is set to private. Either:
 #     a) Wait for it to be flipped to public (file an issue at github.com/AEON-7/Qwen3.6-NVFP4-DFlash/issues), OR
-#     b) If you're AEON-7: flip at github.com/users/AEON-7/packages/container/vllm-spark-omni-q36/settings, OR
+#     b) If you're AEON-7: flip at github.com/users/AEON-7/packages/container/aeon-vllm-ultimate/settings, OR
 #     c) Build from source per docs/build.md (note: also requires a public base image)
 
 # 4. DFlash drafter is publicly pullable — no auth needed
@@ -157,7 +157,7 @@ docker pull ghcr.io/aeon-7/aeon-vllm-ultimate:latest
 
 Verify:
 ```bash
-docker images vllm-spark-omni-q36 --format 'table {{.Repository}}:{{.Tag}}\t{{.Size}}'
+docker images aeon-vllm-ultimate --format 'table {{.Repository}}:{{.Tag}}\t{{.Size}}'
 ```
 
 ---
