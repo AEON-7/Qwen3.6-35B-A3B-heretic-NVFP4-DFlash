@@ -106,7 +106,7 @@ This patch + the post-2026-04-19 DFlash drafter together eliminate the need for 
 
 **v1 only — not used in the v1.2 production image.** v1 of the published weights had `model.language_model.layers.X.*` keys rewritten to `model.layers.X.*` so they'd load via the text-only `Qwen3_5MoeForCausalLM` class. The rewrite codepath turned out to be unstable in vLLM's loader at scale.
 
-v2 weights (re-quantized 2026-04-19 with `AutoModelForImageTextToText`) preserve the canonical multimodal key layout and load natively via `Qwen3_5MoeForConditionalGeneration`. **No prefix-strip is performed at any stage.**
+v2 weights (re-quantized 2026-04-19 with `AutoModelForImageTextToText`) preserve the canonical multimodal **text-decoder** key layout and load natively via `Qwen3_5MoeForConditionalGeneration`. **No prefix-strip is performed at any stage.** (The vision tensors, however, were initially mis-nested under `model.language_model.visual.*` instead of the expected sibling `model.visual.*`, causing vLLM to skip-load the vision tower; this was corrected by a header-only rename on 2026-06-18.)
 
 If you have a v1 checkpoint locally, the simplest fix is: delete and re-pull `AEON-7/Qwen3.6-35B-A3B-heretic-NVFP4` (the same repo URL — v2 commits replaced v1).
 
