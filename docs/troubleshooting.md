@@ -19,7 +19,7 @@ Symptoms ↔ root causes ↔ fixes for the running deployment.
 You've pulled the **wrong image** (a cu128 official nightly). DGX Spark ships cu130 PyTorch.
 
 ```bash
-docker pull ghcr.io/aeon-7/vllm-spark-omni-q36:v1.2   # this one is cu130
+docker pull ghcr.io/aeon-7/aeon-vllm-ultimate:latest   # this one is cu130/sm_121a
 ```
 
 ### `KeyError: 'experts.w2_input_global_scale'` (or similar prefix-strip key error)
@@ -47,8 +47,11 @@ hf download AEON-7/Qwen3.6-35B-A3B-heretic-NVFP4 --local-dir /opt/qwen36/qwen36-
 
 **Under v1.2 image + v2 weights this is the EXPECTED message — not an error.** The image
 no longer needs to register text-only `Qwen3_5MoeForCausalLM`. The multimodal class loads
-the v2 weights natively and runs in text-only mode (no image inputs in chat) with no extra
-patches in the hot path.
+the v2 weights natively, with no extra patches in the hot path. (Note: image inputs were
+silently non-functional on the original v2 checkpoint because the 333 vision tensors were
+mis-nested under `model.language_model.visual.*`; vLLM skip-loaded the vision tower and image
+prompts returned `!!!!`. The 2026-06-18 header-only rename to `model.visual.*` restored image
+understanding — re-pull if your weights pre-date that.)
 
 If you're running v1.0 or v1.1 image with v1 (prefix-stripped) weights and seeing this,
 your registry patch didn't apply. Either upgrade to v1.2 + v2 weights (recommended), or

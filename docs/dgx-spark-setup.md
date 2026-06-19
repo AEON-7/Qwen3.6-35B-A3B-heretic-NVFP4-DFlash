@@ -79,7 +79,7 @@ nvidia-smi | grep -E 'GB10|Driver'   # expect "NVIDIA GB10" + driver 580+
 docker run --rm --gpus all nvidia/cuda:13.2.0-base-ubuntu24.04 nvidia-smi | head -3
 
 # 3. GHCR image is pullable (anonymous)
-docker pull ghcr.io/aeon-7/vllm-spark-omni-q36:v1.2
+docker pull ghcr.io/aeon-7/aeon-vllm-ultimate:latest
 # If this returns "unauthorized" or "not found":
 #   - The image visibility is set to private. Either:
 #     a) Wait for it to be flipped to public (file an issue at github.com/AEON-7/Qwen3.6-NVFP4-DFlash/issues), OR
@@ -144,7 +144,7 @@ You'll end up with:
 ## Step 3 — Pull the Docker image
 
 ```bash
-docker pull ghcr.io/aeon-7/vllm-spark-omni-q36:v1.2
+docker pull ghcr.io/aeon-7/aeon-vllm-ultimate:latest
 ```
 
 ~9 GB compressed, ~22 GB uncompressed. First pull is 3-5 min on a typical home connection.
@@ -201,8 +201,26 @@ from safetensors import safe_open
 with safe_open('qwen36-nvfp4/model-00001-of-00009.safetensors', framework='pt') as f:
     keys = [k for k in f.keys() if 'experts.0.down_proj' in k]
     print('Sample expert key:', keys[0] if keys else 'NONE FOUND')
-    assert any('language_model' in k for k in f.keys()), 'WRONG LAYOUT — re-pull AEON-7/Qwen3.6-35B-A3B-heretic-NVFP4'
-    print('OK — v2 multimodal layout confirmed')
+# Sanity check — confirm v2 multimodal layout AND that the vision tower is correctly placed.
+# Scan EVERY weight file (the fixed checkpoint is a single model.safetensors; older docs
+# referenced 9 shards — glob both so the check never runs vacuously on one shard).
+python3 -c "
+import glob
+from safetensors import safe_open
+files = sorted(glob.glob('qwen36-nvfp4/model*.safetensors'))
+assert files, 'NO WEIGHTS FOUND — download did not complete'
+keys = []
+for fp in files:
+    with safe_open(fp, framework='pt') as f:
+        keys += list(f.keys())
+assert any('model.language_model.layers' in k for k in keys), 'WRONG LAYOUT — re-pull AEON-7/Qwen3.6-35B-A3B-heretic-NVFP4'
+# Vision tower MUST be model.visual.* (sibling of model.language_model), NOT
+# model.language_model.visual.* — the mis-nested form is silently skip-loaded by vLLM and
+# image inputs return '!!!!'. Header-only rename fixed this 2026-06-18 (weights byte-identical).
+assert any('model.visual.' in k for k in keys), 'NO VISION TOWER FOUND — re-pull; expect 333 model.visual.* tensors'
+assert not any('model.language_model.visual' in k for k in keys), 'STALE VISION LAYOUT — re-pull; vision tower must be model.visual.* (header-only fix landed 2026-06-18)'
+print('OK — v2 multimodal layout confirmed (text decoder + sibling vision tower)')
+"
 "
 ```
 
@@ -222,11 +240,11 @@ Or copy [`examples/docker-compose.yml`](../examples/docker-compose.yml) from thi
 |---|---|---|
 | `--quantization compressed-tensors` | required | NVFP4 packed weights are compressed-tensors `nvfp4-pack-quantized` format |
 | `--max-model-len` | 262144 | Full 256K context (`VLLM_ALLOW_LONG_MAX_MODEL_LEN=1` env required) |
-| `--max-num-seqs` | 128 | Concurrent request cap (validated at 128-concurrency without OOM) |
-| `--max-num-batched-tokens` | 65536 | Chunked prefill chunk size; 65536 gives best aggregate throughput |
-| `--gpu-memory-utilization` | 0.85 | Conservative for 128 GB unified memory (leaves ~18 GB for OS + dflash + KV) |
+| `--max-num-seqs` | 64 | Concurrent request cap. **Required for DFlash spec-decode** — if omitted the scheduler can compute a negative (-512) token budget and boot fails |
+| `--max-num-batched-tokens` | 65536 | Chunked prefill chunk size. **Required alongside `--max-num-seqs` for DFlash** (negative-budget boot failure otherwise) |
+| `--gpu-memory-utilization` | 0.70 | GB10 shares one LPDDR5X pool across CPU+GPU; ≤0.70 avoids page-thrash (was 0.85 on the old image; never exceed 0.88) |
 | `--attention-backend flash_attn` | required | DFlash needs FlashAttention backend |
-| `--speculative-config` | `{"method":"dflash","model":"/models/qwen36-dflash","num_speculative_tokens":15}` | DFlash with k=15 (sweet spot for Qwen3.6 acceptance curve) |
+| `--speculative-config` | `{"method":"dflash","model":"/models/qwen36-dflash","num_speculative_tokens":11}` | DFlash k≈11 is optimal on aeon-vllm-ultimate (acceptance/long-ctx drop past ~11; k=15 wastes draft compute) |
 | `--reasoning-parser qwen3` | | Surfaces `<think>...</think>` content as `reasoning_content` |
 | `--tool-call-parser qwen3_coder` | | OpenAI-format tool calls for agentic workloads |
 | `--served-model-name` | `qwen36-35b-heretic qwen36-fast qwen36-deep` | 3 aliases for one backend (mode routing) |
@@ -414,7 +432,7 @@ Key metrics to watch:
 ```bash
 # Pin to a specific tag — DON'T use :latest in production (image bumps may
 # require weight re-pull, e.g., the v1.x → v2 transition)
-docker pull ghcr.io/aeon-7/vllm-spark-omni-q36:v1.2
+docker pull ghcr.io/aeon-7/aeon-vllm-ultimate:2026-06-18-v0.23.0-dflashfix
 cd /opt/qwen36
 docker compose up -d --force-recreate
 ```
@@ -431,7 +449,7 @@ preserved multimodal architecture instead of stripping the `language_model.` key
 ```bash
 cd /opt/qwen36
 docker compose down
-docker rmi ghcr.io/aeon-7/vllm-spark-omni-q36:v1.2   # optional
+docker rmi ghcr.io/aeon-7/aeon-vllm-ultimate:latest   # optional
 sudo rm -rf /opt/qwen36                                # also removes weights
 sudo systemctl disable --now vllm-qwen36 2>/dev/null
 sudo rm /etc/systemd/system/vllm-qwen36.service 2>/dev/null

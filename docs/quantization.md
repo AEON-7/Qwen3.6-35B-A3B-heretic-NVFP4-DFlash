@@ -1,4 +1,4 @@
-# NVFP4 quantization recipe (v2 — multimodal preserved)
+# NVFP4 quantization recipe (v2 — multimodal preserved; see vision-nesting fix 2026-06-18)
 
 How the `AEON-7/Qwen3.6-35B-A3B-heretic-NVFP4` v2 checkpoint was produced (re-quantized 2026-04-19). Use this if you want to:
 - Re-quantize with a different calibration set
@@ -10,7 +10,9 @@ How the `AEON-7/Qwen3.6-35B-A3B-heretic-NVFP4` v2 checkpoint was produced (re-qu
 > That layout caused intermittent NaN/crash in vLLM's prefix-strip codepath in production.
 > v2 uses `AutoModelForImageTextToText` to preserve the full multimodal architecture
 > (`Qwen3_5MoeForConditionalGeneration` + 27-block ViT vision encoder kept BF16).
-> vLLM's canonical multimodal class loads it natively — no prefix-strip patches needed.
+> vLLM's canonical multimodal class loads the **text** path natively — no prefix-strip patches needed.
+>
+> ⚠️ **Known defect (fixed 2026-06-18):** `AutoModelForImageTextToText` saved the 333 vision tensors nested under `model.language_model.visual.*`, but vLLM's `Qwen3_5MoeForConditionalGeneration` expects `model.visual.*` as a **sibling** of `model.language_model` (not a child). vLLM silently skip-loaded the entire vision tower, so image inputs returned `!!!!` garbage. Fixed by a header-only rename of those 333 keys to `model.visual.*` (weight bytes byte-identical, no re-quantization). **If you reproduce this recipe, rename the 333 vision keys from `model.language_model.visual.*` to `model.visual.*` in the saved `model.safetensors` header before serving, or vision will not load.** Note the verification snippet below asserts the `model.language_model.` prefix is present — that check passes even when vision is broken, so it does NOT confirm vision loads.
 
 ## Format
 
@@ -166,9 +168,15 @@ assert any("input_global_scale" in k for k in all_keys), \
     "missing activation scales"
 assert "lm_head.weight" in all_keys, "lm_head should be preserved unquantized"
 
-# Vision tower preserved BF16
+# Vision tower preserved BF16 AND correctly nested for vLLM (must be model.visual.*, NOT model.language_model.visual.*)
 visual_keys = [k for k in all_keys if "visual" in k]
 assert len(visual_keys) > 100, f"visual tower seems missing or quantized (only {len(visual_keys)} keys)"
+misnested = [k for k in visual_keys if k.startswith("model.language_model.visual")]
+assert not misnested, (
+    f"VISION MIS-NESTED: {len(misnested)} keys under model.language_model.visual.* — "
+    "vLLM expects model.visual.* (sibling of model.language_model) and will SKIP-LOAD the vision tower "
+    "(image inputs -> '!!!!'). Rename these 333 keys to model.visual.* (header-only, no re-quant)."
+)
 
 # Scale magnitudes — sanity-check that scales aren't inverted
 with safe_open(shards[0], framework="pt") as f:
