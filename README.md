@@ -234,7 +234,7 @@ The historical `v1/v1.2` per-revision backport patch table is kept below for ope
 | 4 | `patch_mrope_text_fallback.py` | Qwen3.6 declares M-RoPE in config but no model class implements `get_mrope_input_positions` in vLLM HEAD. Adds inline fallback for the canonical text-only positions (T=H=W=arange). |
 | 5 | `patch_cudagraph_align.py` | Aligns spec-decode CUDA graph capture sizes for **pure `PIECEWISE`** mode. Default `FULL_AND_PIECEWISE` spec-decode deployments already capture FULL decode graphs and have not reproduced this failure in long soaks. |
 | 6 | ENV `VLLM_TEST_FORCE_FP8_MARLIN=1` | **v1/v1.2 compatibility guard only.** Current v2 images set this to `0` and use FlashInfer CUTLASS NVFP4 successfully on GB10. Keep Marlin only for older bases or shapes that still reject CUTLASS/grouped kernels. |
-| 7 | ENV `TORCH_CUDA_ARCH_LIST="12.0+PTX"` | Build target for sm_120, runtime JITs to sm_121a on Spark. |
+| 7 | ENV `TORCH_CUDA_ARCH_LIST="12.1a"` | Native sm_121a (GB10) build target — the v0.23.0 image compiles 12.1a SASS directly (older image used sm_120+PTX JIT). |
 | 8 | flashinfer 0.6.8 | sm_120 NVFP4 KV-cache decode kernels (PRs #2520, #2702). |
 
 All patches live in [`patches/`](patches/) and run automatically at image build time (idempotent). The [`Dockerfile`](Dockerfile) is reproducible — see [`docs/build.md`](docs/build.md).
