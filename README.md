@@ -82,7 +82,7 @@ Single-stream decode averages **~97 tok/s** across the six categories (min 75 on
 
 <p align="center"><img src="assets/perf/qwen35b_concurrency.svg" width="100%" alt="Aggregate throughput scaling from 1 to 64 concurrent requests on aeon-vllm-ultimate — up to ~740 tok/s at c=64, no concurrency crash"></p>
 
-Aggregate throughput climbs cleanly to **c=64** with zero crashes — the exact regime where the prior image (`vllm-spark-omni-q36:v1.2`) died at c≥32 under speculative decoding. Peak aggregate is **~740 tok/s at c=64** (Math), ~717 (Extraction/JSON), ~669 (Reasoning); per-active-stream decode and TPOT degrade gracefully as concurrency rises.
+Aggregate throughput climbs cleanly to **c=64** with zero crashes — the exact regime where the prior image (`vllm-spark-omni-q36:v1.2`) died at c≥32 under speculative decoding. Peak aggregate is **~740 tok/s at c=64** (Math), ~717 (Extraction/JSON), ~669 (Reasoning); throughput is DFlash-acceptance-driven, so creative-text categories run lower (**~430 Prose / ~474 Natural-language at c=64**, where draft acceptance is ~22–27% vs ~46–55% on structured text). Per-active-stream decode and TPOT degrade gracefully as concurrency rises.
 
 | Concurrency | Math agg tok/s | Coding agg tok/s | Extraction/JSON agg tok/s | Best per-req decode p50 |
 |---:|---:|---:|---:|---:|
