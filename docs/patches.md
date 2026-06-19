@@ -116,7 +116,7 @@ If you have a v1 checkpoint locally, the simplest fix is: delete and re-pull `AE
 
 | # | Item | What it does |
 |---:|---|---|
-| A | `TORCH_CUDA_ARCH_LIST="12.0+PTX"` | Single-arch sm_120 build with PTX → driver JITs to sm_121a on Spark |
+| A | `TORCH_CUDA_ARCH_LIST="12.1a"` | Native single-arch sm_121a (GB10) build — v0.23.0 compiles 12.1a SASS directly (older image used sm_120+PTX JIT) |
 | B | `flashinfer-python>=0.6.8` | sm_120 NVFP4 KV-cache decode kernels (PRs #2520, #2702) |
 | C | `VLLM_TEST_FORCE_FP8_MARLIN` | v1/v1.2 baked `=1` as a defensive pin for older MoE/grouped NVFP4 backend selection. Current v2 images bake `=0`; FlashInfer CUTLASS NVFP4 linear GEMM is validated on GB10, and `VLLM_USE_FLASHINFER_MOE_FP4=0` prevents the unsupported MoE FP4 auto-probe path. |
 
