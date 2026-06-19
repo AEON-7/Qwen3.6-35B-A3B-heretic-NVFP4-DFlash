@@ -57,7 +57,7 @@ docker compose up -d --force-recreate
 The image already supports vLLM plugins. Add a `pip install` to a derivative Dockerfile:
 
 ```dockerfile
-FROM ghcr.io/aeon-7/vllm-spark-omni-q36:v1
+FROM ghcr.io/aeon-7/aeon-vllm-ultimate:latest
 RUN uv pip install --system git+https://github.com/z-lab/dtree.git
 ```
 
@@ -68,8 +68,8 @@ vLLM auto-discovers plugins via Python entry points. The plugin should register 
 Build a custom vLLM wheel from their fork:
 
 ```dockerfile
-FROM ghcr.io/aeon-7/vllm-spark-gemma4-nvfp4-awq:latest
-ENV TORCH_CUDA_ARCH_LIST="12.0+PTX" MAX_JOBS=14 NVCC_THREADS=2
+FROM ghcr.io/aeon-7/aeon-vllm-ultimate:latest
+ENV TORCH_CUDA_ARCH_LIST="12.1a" MAX_JOBS=12 NVCC_THREADS=2
 RUN git clone https://github.com/z-lab/vllm-dtree.git /workspace/vllm-dtree && \
     cd /workspace/vllm-dtree && python use_existing_torch.py && \
     uv pip install --system --no-build-isolation --no-deps .
