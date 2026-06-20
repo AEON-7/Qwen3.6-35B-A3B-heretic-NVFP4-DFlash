@@ -82,7 +82,7 @@ docker run --rm --gpus all nvidia/cuda:13.2.0-base-ubuntu24.04 nvidia-smi | head
 docker pull ghcr.io/aeon-7/aeon-vllm-ultimate:latest
 # If this returns "unauthorized" or "not found":
 #   - The image visibility is set to private. Either:
-#     a) Wait for it to be flipped to public (file an issue at github.com/AEON-7/Qwen3.6-NVFP4-DFlash/issues), OR
+#     a) Wait for it to be flipped to public (file an issue at github.com/AEON-7/Qwen3.6-35B-A3B-heretic-NVFP4-DFlash/issues), OR
 #     b) If you're AEON-7: flip at github.com/users/AEON-7/packages/container/aeon-vllm-ultimate/settings, OR
 #     c) Build from source per docs/build.md (note: also requires a public base image)
 
@@ -230,7 +230,7 @@ print('OK — v2 multimodal layout confirmed (text decoder + sibling vision towe
 
 ```bash
 curl -fsSL \
-  https://raw.githubusercontent.com/AEON-7/Qwen3.6-NVFP4-DFlash/main/examples/docker-compose.yml \
+  https://raw.githubusercontent.com/AEON-7/Qwen3.6-35B-A3B-heretic-NVFP4-DFlash/main/examples/docker-compose.yml \
   -o /opt/qwen36/docker-compose.yml
 ```
 
@@ -350,7 +350,7 @@ pip install --user openai
 
 # Pull the bench script
 curl -fsSL \
-  https://raw.githubusercontent.com/AEON-7/Qwen3.6-NVFP4-DFlash/main/scripts/bench_concurrency.py \
+  https://raw.githubusercontent.com/AEON-7/Qwen3.6-35B-A3B-heretic-NVFP4-DFlash/main/scripts/bench_concurrency.py \
   -o /tmp/bench.py
 
 # Run

@@ -346,7 +346,7 @@ location /v1/ {
 
 ## Filing an issue
 
-If none of the above applies, file at https://github.com/aeon-7/Qwen3.6-NVFP4-DFlash/issues with:
+If none of the above applies, file at https://github.com/aeon-7/Qwen3.6-35B-A3B-heretic-NVFP4-DFlash/issues with:
 
 ```bash
 # Run this and paste the output

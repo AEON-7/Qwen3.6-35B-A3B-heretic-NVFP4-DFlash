@@ -162,7 +162,7 @@ hf download z-lab/Qwen3.6-35B-A3B-DFlash         --local-dir ./qwen36-dflash &
 wait
 
 # 3. Get the compose file
-curl -fsSL https://raw.githubusercontent.com/AEON-7/Qwen3.6-NVFP4-DFlash/main/examples/docker-compose.yml \
+curl -fsSL https://raw.githubusercontent.com/AEON-7/Qwen3.6-35B-A3B-heretic-NVFP4-DFlash/main/examples/docker-compose.yml \
   -o docker-compose.yml
 
 # 4. Start the server (3-5 min to first "Application startup complete")
