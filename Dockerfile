@@ -138,7 +138,7 @@ RUN python3 -c "import vllm, flashinfer, torch; print(f'POST vLLM={vllm.__versio
 # Runtime hint: if NVFP4 decode hits 'illegal instruction', add --enforce-eager (issue #39761)
 LABEL org.opencontainers.image.title="vllm-spark-omni-q36" \
       org.opencontainers.image.description="Source-built vLLM HEAD for GB10/sm_120 + DFlash + flashinfer 0.6.8 + Qwen3.6 text-only registry fix" \
-      org.opencontainers.image.source="https://github.com/aeon-7/Qwen3.6-NVFP4-DFlash" \
+      org.opencontainers.image.source="https://github.com/aeon-7/Qwen3.6-35B-A3B-heretic-NVFP4-DFlash" \
       org.opencontainers.image.base.name="ghcr.io/aeon-7/vllm-spark-gemma4-nvfp4-awq:latest" \
       vllm.compute_capability="sm_120+PTX" \
       vllm.target_hardware="DGX Spark / GB10 / sm_121a"
