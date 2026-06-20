@@ -12,7 +12,7 @@ A production-stable deployment of **[`AEON-7/Qwen3.6-35B-A3B-heretic-NVFP4`](htt
 
 | | |
 |---|---|
-| **Model** | `AEON-7/Qwen3.6-35B-A3B-heretic-NVFP4` (~22 GB, multimodal preserved) |
+| **Model** | `AEON-7/Qwen3.6-35B-A3B-heretic-NVFP4` (~22 GB, multimodal — **image input working** as of the 2026-06-18 vision fix) |
 | **Drafter** | `z-lab/Qwen3.6-35B-A3B-DFlash` (~905 MB, public anonymous pull) |
 | **Hardware** | DGX Spark (NVIDIA GB10, 128 GB unified memory, sm_121a) |
 | **Image** | `ghcr.io/aeon-7/aeon-vllm-ultimate:latest` (= `:2026-06-18-v0.23.0-dflashfix`; rollback `:2026-06-11-pr41703`) |
@@ -106,6 +106,8 @@ Measured single-stream (c=1) at realistic agent-history depths on the same image
 | ~32k tokens | 79.3 tok/s | 73.0 tok/s | 94.4 tok/s | ~58% |
 
 Draft acceptance does **not** collapse as context grows — at 32k it holds 42–58% across categories. (Unlike the 27B drafter, the z-lab Qwen3.6-35B-A3B DFlash drafter is an **8-layer all-full-attention** model, so it never had a sliding-window collapse to begin with — the long-context hold here is intrinsic to the drafter, and the prefix-cache-safe DFlash path (PR #41703) keeps `--enable-prefix-caching` corruption-immune.) Prefill stays fast (~4.3–5.1k tok/s) so TTFT at 32k is single-digit seconds at c=1.
+
+> **Re-validated 2026-06-19** on the exact published quickstart recipe (fresh `aeon-vllm-ultimate:latest` pull + corrected weights, DFlash `n=11`): **multimodal vision works end-to-end** (7/7 on an image probe, **0 vision skip-loads**) and the throughput spread reproduced with **zero errors at c=64** — peak **~800 tok/s @ c=32** (Reasoning), structured categories **705–781 tok/s @ c=64**, creative-text **430–474 @ c=64**; DFlash acceptance ~46–55% (structured) / ~22–27% (creative) at short context, holding **~40–45% at 16–20K** tokens.
 
 Full bench results on the **HF model card**: [`AEON-7/Qwen3.6-35B-A3B-heretic-NVFP4`](https://huggingface.co/AEON-7/Qwen3.6-35B-A3B-heretic-NVFP4#performance-benchmarks).
 
@@ -257,7 +259,7 @@ All AEON models run on one unified container — **`ghcr.io/aeon-7/aeon-vllm-ult
 | **sm_121a boot + CUDA-graph patches** | RTLD-lazy `_C_stable_libtorch` load; spec-decode CUDA-graph capture-size alignment | Boots past MXFP4 (SM100-only) symbols absent on GB10; prevents `cudaErrorIllegalAddress` on partial-acceptance decode steps under speculative decoding. |
 | **Unified-memory tuning** | `--gpu-memory-utilization ≤0.70`, FULL CUDA graphs, async scheduling, z-lab DFlash drafter | GB10 shares one LPDDR5X pool across CPU + GPU; conservative KV headroom avoids page-thrash while keeping FULL-graph + speculative-decode throughput. |
 
-**The result for this model:** scales to **64 concurrent requests** with no crash (the prior `vllm-spark-omni-q36:v1.2` image crashed at c≥32 under speculative decoding), holds DFlash draft acceptance from short prompts through 32k-token agent histories, and serves at **~97 tok/s avg single-stream / ~740 tok/s peak aggregate at c=64**. A stock vanilla-vLLM contrast for this model is still **pending a fresh fully-vanilla re-benchmark**, so no stock-vs-optimized speedup multiple is quoted yet.
+**The result for this model:** scales to **64 concurrent requests** with no crash (the prior `vllm-spark-omni-q36:v1.2` image crashed at c≥32 under speculative decoding), holds DFlash draft acceptance from short prompts through 32k-token agent histories, and serves at **~75–132 tok/s single-stream / ~700–800 tok/s peak aggregate** (acceptance-driven across categories), and — as of the **2026-06-18 vision fix** — **multimodal image input works** (validated 7/7). A stock vanilla-vLLM contrast for this model is still **pending a fresh fully-vanilla re-benchmark**, so no stock-vs-optimized speedup multiple is quoted yet.
 
 ---
 
@@ -267,13 +269,19 @@ Previous v1 weights had `language_model.` prefix stripped from safetensors keys 
 
 v2 (current) re-quantized from `tvall43/Qwen3.6-35B-A3B-heretic` directly with `AutoModelForImageTextToText`, preserving:
 - Full multimodal architecture (`Qwen3_5MoeForConditionalGeneration`)
-- 27-block ViT vision encoder (BF16, NVFP4-skipped)
+- 27-block ViT vision encoder (BF16, NVFP4-skipped) — ⚠️ these vision tensors were initially mis-nested under `model.language_model.visual.*` and silently **skip-loaded** by vLLM (image inputs → `!!!!`) until the **2026-06-18 vision fix** (below)
 - Original `model.language_model.layers.X.*` key layout — vLLM's multimodal class loads natively, no prefix-strip patch needed
 - 30 linear_attention (Mamba/GDN, fp32) + 10 full_attention layers
 - 256 routed experts × 8 active + 1 shared expert per layer
 - All 122,880 per-expert NVFP4 keys (every expert calibrated)
 
 vLLM serves it via the canonical multimodal class — fewer code paths in the inference hot loop, much better stability under load. Travis ran multiple live chat sessions (Celina) without a single crash where v1 was crashing on virtually every interaction.
+
+### Vision fix (2026-06-18) — image input now works
+
+v2 preserved the ViT's BF16 weights, but a quantization-time `ignore`-regex **nested the 333 vision tensors one level too deep** — as `model.language_model.visual.*` (a *child* of the language model) instead of the sibling `model.visual.*` that vLLM's `Qwen3_5MoeForConditionalGeneration` expects. vLLM **silently skip-loaded the entire vision tower** and ran it uninitialized, so text was perfect but **any image input returned `!!!!` garbage**.
+
+The fix is a **header-only rename** of those 333 tensors to `model.visual.*` — the NVFP4/BF16 weight data is **byte-for-byte identical** (no re-quantization). vLLM now loads the full ViT (0 skip-loads) and image understanding works, validated on `aeon-vllm-ultimate:latest` (**7/7** on a shapes/colors probe + a coherent scene description). The corrected `model.safetensors` is live on the HF repo — **re-pull if you cloned before 2026-06-18.** (The 27B siblings already used the correct `model.visual.*` layout and were unaffected.)
 
 ---
 
@@ -297,7 +305,7 @@ OpenClaw config (validated against actual zod schemas) is in [`docs/openclaw.md`
 | [`docs/dflash.md`](docs/dflash.md) | DFlash speculative decoding tuning + monitoring |
 | [`docs/dtree.md`](docs/dtree.md) | Future-work — slot DTree in when z-lab releases |
 | [`docs/quantization.md`](docs/quantization.md) | Recreating the NVFP4 quantization end-to-end (including v2 recipe) |
-| [`docs/build.md`](docs/build.md) | Building the image yourself instead of pulling from GHCR |
+| [`docs/build.md`](docs/build.md) | Building the image from source (advanced — canonical Dockerfile/patches live in the [container repo](https://github.com/AEON-7/vllm-ultimate-dgx-spark)) |
 | [`docs/troubleshooting.md`](docs/troubleshooting.md) | Symptoms → root causes → fixes |
 | [`docs/patches.md`](docs/patches.md) | Each patch explained, with the upstream issues they address |
 
