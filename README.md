@@ -44,11 +44,12 @@ docker run --gpus all --rm -p 8000:8000 \
   --quantization compressed-tensors \
   --max-model-len 262144 \
   --max-num-seqs 64 \
-  --max-num-batched-tokens 65536 \
-  --gpu-memory-utilization 0.70 \
+  --max-num-batched-tokens 16384 \
+  --gpu-memory-utilization 0.85 \
   --enable-chunked-prefill \
   --enable-prefix-caching \
   --trust-remote-code \
+  --limit-mm-per-prompt '{"image":4,"video":2}' \
   --enable-auto-tool-choice --tool-call-parser qwen3_coder \
   --reasoning-parser qwen3 \
   --attention-backend flash_attn \
@@ -191,11 +192,12 @@ vllm serve /models/qwen36 \
   --quantization compressed-tensors \
   --max-model-len 262144 \
   --max-num-seqs 64 \
-  --max-num-batched-tokens 65536 \
-  --gpu-memory-utilization 0.70 \
+  --max-num-batched-tokens 16384 \
+  --gpu-memory-utilization 0.85 \
   --enable-chunked-prefill \
   --enable-prefix-caching \
   --trust-remote-code \
+  --limit-mm-per-prompt '{"image":4,"video":2}' \
   --enable-auto-tool-choice --tool-call-parser qwen3_coder \
   --reasoning-parser qwen3 \
   --attention-backend flash_attn \
@@ -211,7 +213,8 @@ Key changes from the old `vllm-spark-omni-q36:v1.2` recipe:
 | `--attention-backend` | `flash_attn` | `flash_attn` | unchanged (body backend) |
 | DFlash `num_speculative_tokens` | **11** | 15 | n≈10–11 is optimal here — acceptance/long-context fidelity drop as n climbs past ~11; n=15 wasted draft compute |
 | Drafter attention backend | **default** (do not set) | — | the non-causal DFlash drafter requires its default backend / BF16 KV; do **not** add `attention_backend` to the spec config or set `--kv-cache-dtype` |
-| `--gpu-memory-utilization` | **0.70** | 0.85 | GB10 shares one LPDDR5X pool across CPU+GPU; ≤0.70 avoids page-thrash |
+| `--gpu-memory-utilization` | **0.85** (LLM-only) · 0.70 (co-located) | 0.85 | 0.85 maximizes KV cache when the LLM is the only GPU service and is safe on GB10 (below the 0.88 cap); drop to ≤0.70 only if co-locating ASR/TTS/embeddings (page-thrash headroom) |
+| `--max-num-batched-tokens` | **16384** | 65536 | 65536 exceeds the compile-range ceiling (`compile_ranges_endpoints: [32768]`) → eager-prefill fallback + heavy unified-memory pressure at load. 16384 stays in the compiled range, frees several GB of prefill activation, and is throughput-neutral — chunked prefill preserves the full 256k context. |
 | `--mamba-block-size` | **(not set)** | — | this drafter's attention is all-full-attention; no mamba-block-size override is needed |
 
 > The DFlash drafter is a no-regression migration onto the unified image — the 8-layer all-full-attention drafter behaves the same as on the old image at every concurrency (no long-context collapse to undo and nothing to gain past n≈11), so the win here is the **unified container + the c≥32 concurrency-crash fix**, not a raw single-stream speedup.
