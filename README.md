@@ -56,6 +56,8 @@ docker run --gpus all --rm -p 8000:8000 \
   --speculative-config '{"method":"dflash","model":"/drafter","num_speculative_tokens":11}'
 ```
 
+> **Optional — faster restarts:** add `-v ./vllm-cache:/root/.cache/vllm` to the `docker run` (after a one-time `mkdir -p ./vllm-cache`) to persist the FlashInfer NVFP4 GEMM autotuner + CUDA-graph capture across container restarts. First boot stays ~10–12 min, but subsequent restarts drop to ~3–5 min.
+
 For a docker-compose deployment, the 3-alias setup, and per-flag rationale, see [Deployment (compose + full recipe)](#deployment-compose--full-recipe) below.
 
 ---
