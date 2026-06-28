@@ -1,5 +1,7 @@
 # Qwen3.6-35B-A3B-heretic NVFP4 + DFlash on DGX Spark
 
+![AEON Qwen — Supreme Being of the Digital Cosmos](cartridge.jpg)
+
 [![Container](https://img.shields.io/badge/ghcr.io-aeon--vllm--ultimate-blue?logo=docker)](https://github.com/AEON-7/vllm-ultimate-dgx-spark/pkgs/container/aeon-vllm-ultimate)
 [![Model](https://img.shields.io/badge/HuggingFace-AEON--7%2FQwen3.6--35B--A3B--heretic--NVFP4-yellow)](https://huggingface.co/AEON-7/Qwen3.6-35B-A3B-heretic-NVFP4)
 [![Drafter](https://img.shields.io/badge/Drafter-z--lab%2FQwen3.6--35B--A3B--DFlash-orange)](https://huggingface.co/z-lab/Qwen3.6-35B-A3B-DFlash)
